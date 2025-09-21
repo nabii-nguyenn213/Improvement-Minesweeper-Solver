@@ -28,13 +28,30 @@ class Improvement_Heuristic:
         
     def border_board(self, current_board): 
         return np.pad(current_board, pad_width=((1, 1), (1, 1)), mode="constant", constant_values=10)
+
+    def find_unsolved_cell(self, current_board): 
+        padded = self.border_board(current_board)
+        H, W = padded.shape
+        board_copy = padded.copy()
+        unsolved_cell = []
+
+        for i in range(1, H - 1):
+            for j in range(1, W - 1):
+                if (i, j) in self.done: continue
+                region = board_copy[i-1:i+2, j-1:j+2]    
+                if self._all_hidden(region) : continue
+                if self._contain_hidden(region):
+                    if region[1, 1] != HIDDEN_CELL and region[1, 1] != FLAG_CELL:
+                        unsolved_cell.append((i-1, j-1))
+
+        return unsolved_cell
         
     def _contain_hidden(self, region): 
         return (region == HIDDEN_CELL).any()
     
     def _all_hidden(self, region): 
         return np.all(region == HIDDEN_CELL)
-    
+
     def flag(self, region): 
         neg_count = np.count_nonzero(region < 0) 
         if neg_count == region[1, 1]: 
@@ -83,7 +100,9 @@ class Improvement_Heuristic:
                                 safes.append((gr - 1, gc - 1))  # shift back to original board
                 else : 
                     self.done.append((i, j))
+
         self.end = time.time()
         self.longest_time_solve = max(self.longest_time_solve, (self.end - self.start))
         self.times += (self.end - self.start)
+
         return safes, flags

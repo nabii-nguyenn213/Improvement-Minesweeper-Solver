@@ -6,11 +6,13 @@ import os
 
 # Your solver
 from models.improvement_heuristic import Improvement_Heuristic
+from models.complex_pattern import Enhanced_Heuristic
 
 # ===== Constants =====
 HIDDEN_CELL = -0.5
 MINE_CELL = -2
 FLAG_CELL = -1
+MAY_MINE = -0.7
 
 HEADLESS = os.environ.get("HEADLESS", "0") in ("1", "true", "True")
 PAGE_LOAD_TIMEOUT = 20
@@ -189,7 +191,7 @@ def main():
     options.add_experimental_option("excludeSwitches", ["enable-automation"])
     options.add_experimental_option("useAutomationExtension", False)
     options.add_argument("--incognito")
-    options.add_argument("--window-size=1000,900")
+    options.add_argument("--window-size=700,500")
     options.page_load_strategy = "eager"
 
     driver = webdriver.Chrome(options=options)
@@ -245,13 +247,41 @@ def main():
                 t3 = time.perf_counter()
 
                 if not safes and not mines:
-                    # Heuristic stuck: log solved %
-                    num_hidden = number_of_cell_hidden(current_board)
-                    solved = (nrow * ncol - num_hidden) / (nrow * ncol)
-                    print("HEURISTIC STUCK")
-                    print(f"Board solved : {solved:.3%}")
-                    board_solved_proportion.append(solved)
-                    break
+                    print("COMPLEX PATTERN SOLVE")
+                    unsolved_cell = heuristic.find_unsolved_cell(current_board)
+                    unsolved_cell = [(r + 1, c + 1) for (r, c) in unsolved_cell]
+                    complex_solver = Enhanced_Heuristic()
+                    safes, mines = complex_solver.solve(current_board=current_board, unsolved_cell=unsolved_cell)
+                    if safes == [] and mines == []: 
+                        print("CANNOT SOLVE ")
+                        break
+                    if safes : 
+                        js_left_click_cells(driver, safes)
+                        try:
+                            WebDriverWait(driver, 3).until(lambda d: d.execute_script("""
+                                const coords = arguments[0];
+                                for (const [r,c] of coords){
+                                    const el = document.getElementById((r+1)+'_'+(c+1));
+                                    if (!el) continue;
+                                    const cls = el.className || '';
+                                    if (cls.includes('open') || cls.includes('bomb')) return true;
+                                }
+                                return false;
+                            """, _norm_coords(safes)))
+                        except Exception:
+                            pass
+
+                    new_flags = []
+                    for r, c in (mines or []):
+                        rc = (int(r), int(c))
+                        if rc not in flag_coords:
+                            flag_coords.append(rc)
+                            new_flags.append(rc)
+                    # To show flags on the webpage (slightly slower), uncomment:
+                    if new_flags:
+                        js_rightflag_cells(driver, new_flags)
+
+
                 else:
                     if safes:
                         js_left_click_cells(driver, safes)
@@ -276,11 +306,11 @@ def main():
                             flag_coords.append(rc)
                             new_flags.append(rc)
                     # To show flags on the webpage (slightly slower), uncomment:
-                    # if new_flags:
-                    #     js_rightflag_cells(driver, new_flags)
+                    if new_flags:
+                        js_rightflag_cells(driver, new_flags)
 
                 done = game_status(driver)
-                print(f"[read={t1-t0:.4f}s solve={t3-t2:.4f}s]", end=" ")
+                # print(f"[read={t1-t0:.4f}s solve={t3-t2:.4f}s]", end=" ")
 
             end = time.perf_counter()
             time.sleep(2)
